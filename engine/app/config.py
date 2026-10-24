@@ -25,7 +25,7 @@ DEFAULT_CFG = {
     "loss_streak_cooldown": 3,
     "cooldown_minutes": 60,
     "threshold_forex": 72,
-    "threshold_synth": 82,
+    "threshold_synth": 72,
     "include_synthetics": True,
     "scan_interval": 45,
     "news_blackout_before": 30,

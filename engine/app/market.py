@@ -6,13 +6,22 @@ from .deriv import public_ws
 
 FALLBACK = ["frxEURUSD", "frxGBPUSD", "frxUSDJPY", "frxAUDUSD", "frxUSDCAD", "frxUSDCHF", "frxNZDUSD",
             "frxEURGBP", "frxEURJPY", "frxGBPJPY", "frxXAUUSD", "R_10", "R_25", "R_50", "R_75", "R_100",
-            "1HZ10V", "1HZ25V", "1HZ50V", "1HZ75V", "1HZ100V", "CRASH500", "CRASH1000", "BOOM500", "BOOM1000"]
-WATCH = ["frxEURUSD", "frxGBPUSD", "frxUSDJPY", "frxXAUUSD", "frxAUDUSD", "R_100", "R_75", "1HZ100V", "BOOM1000", "CRASH1000"]
-SYNTH_PREFIX = ("R_", "1HZ", "BOOM", "CRASH", "JD", "stpRNG", "RDBEAR", "RDBULL", "WLD")
+            "1HZ10V", "1HZ25V", "1HZ50V", "1HZ75V", "1HZ100V",
+            "CRASH300N", "CRASH500", "CRASH600", "CRASH900", "CRASH1000",
+            "BOOM300N", "BOOM500", "BOOM600", "BOOM900", "BOOM1000"]
+WATCH = ["frxEURUSD", "frxGBPUSD", "frxUSDJPY", "frxXAUUSD", "frxAUDUSD", "R_75", "1HZ75V", "BOOM1000", "CRASH1000"]
+# R_75 / 1HZ75V = Volatility 75 (the index traders call VIX 75). Boom and Crash use the BOOM/CRASH codes.
+SYNTH_PREFIX = ("R_", "1HZ", "BOOM", "CRASH", "JD", "stpRNG", "RDBEAR", "RDBULL", "WLD", "RB")
+PRIORITY_SYNTH = ["R_75", "1HZ75V",
+                  "BOOM300N", "BOOM500", "BOOM600", "BOOM900", "BOOM1000",
+                  "CRASH300N", "CRASH500", "CRASH600", "CRASH900", "CRASH1000"]
 
 
-def is_synthetic(sym):
-    return sym.startswith(SYNTH_PREFIX)
+def is_synthetic(sym, market=""):
+    if (sym or "").startswith(SYNTH_PREFIX):
+        return True
+    m = (market or "").lower()
+    return "synthetic" in m or m.startswith("random")
 
 
 class Market:
@@ -75,9 +84,24 @@ class Market:
         return out
 
     async def tradable(self, include_synth=True):
-        return [s["symbol"] for s in await self.symbols()
-                if s["open"] and (include_synth or not is_synthetic(s["symbol"]))
-                and (s["symbol"].startswith("frx") or is_synthetic(s["symbol"]))]
+        out, seen = [], set()
+        for row in await self.symbols():
+            sym = row["symbol"]
+            synth = is_synthetic(sym, row.get("market", ""))
+            if not row["open"] or sym in seen:
+                continue
+            if synth and not include_synth:
+                continue
+            if sym.startswith("frx") or synth:
+                out.append(sym)
+                seen.add(sym)
+        # A partial active_symbols payload must not drop Boom, Crash or Volatility 75.
+        if include_synth:
+            for sym in PRIORITY_SYNTH:
+                if sym not in seen:
+                    out.append(sym)
+                    seen.add(sym)
+        return out
 
     async def start_quotes(self, symbols=WATCH):
         for s in symbols:

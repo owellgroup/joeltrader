@@ -1,5 +1,6 @@
 import numpy as np, pandas as pd, pytest
-from app.analysis import analyze_full, overlay, ctx, TF_ORDER
+from app.analysis import analyze_full, entry_threshold, overlay, quick_rank, synth_kind, ctx, TF_ORDER
+from app.market import is_synthetic
 from app.risk import plan_basket
 from app.config import DEFAULT_CFG
 
@@ -39,6 +40,43 @@ def test_analyze_never_crashes_and_signals_are_consistent():
             else:
                 assert s["sl"] > s["entry"] > s["tp1"]
     print("valid signals in 60 random markets:", valid)
+
+
+def test_synthetic_symbols_are_recognized():
+    for s in ("R_75", "1HZ75V", "BOOM1000", "BOOM500", "CRASH1000", "CRASH300N"):
+        assert is_synthetic(s)
+        assert synth_kind(s) in ("vol", "boom", "crash")
+    assert not is_synthetic("frxEURUSD")
+    assert synth_kind("frxEURUSD") is None
+    assert is_synthetic("SOMEIDX", "synthetic_index")
+
+
+def test_synthetic_rank_is_not_dropped_when_neutral():
+    score, _ = quick_rank(synth(drift=0.0, vol=0.0002, seed=3), synthetic=True)
+    assert score > 0
+
+
+def test_synthetic_analysis_runs_for_boom_crash_and_vol():
+    up = frames(7, drift=0.0008)
+    for symbol, kind in (("BOOM1000", "boom"), ("CRASH1000", "crash"), ("R_75", "vol")):
+        r = analyze_full(up, symbol)
+        assert r["kind"] == kind
+        assert 0 <= r["best_score"] <= 100
+        s = r["signal"]
+        if s:
+            assert s["rr"] >= 1.5
+            assert s["durations"]
+            if s["direction"] == "BUY":
+                assert s["sl"] < s["entry"] < s["tp1"]
+            else:
+                assert s["sl"] > s["entry"] > s["tp1"]
+
+
+def test_synthetic_threshold_matches_forex_bar():
+    cfg = {**DEFAULT_CFG, "threshold_forex": 72, "threshold_synth": 82}
+    assert entry_threshold("R_75", cfg) == 72
+    assert entry_threshold("BOOM1000", cfg) == 72
+    assert entry_threshold("frxEURUSD", cfg) == 72
 
 
 def test_risk_small_account():

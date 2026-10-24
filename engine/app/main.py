@@ -5,10 +5,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Header, HTTPException, Depends
 from pydantic import BaseModel
 from . import news
-from .analysis import analyze_full, overlay, TF_ORDER
+from .analysis import analyze_full, entry_threshold, overlay, TF_ORDER
 from .bot import BotSession, emit
 from .config import INTERNAL_KEY, GRAN, DEFAULT_CFG
-from .market import Market, is_synthetic
+from .market import Market
 
 logging.basicConfig(level=logging.INFO)
 market = Market()
@@ -29,9 +29,9 @@ async def watcher_loop():
         for uid, syms in list(watchers.items()):
             for s in syms:
                 try:
-                    r = analyze_full(await market.frames(s, TF_ORDER))
+                    r = analyze_full(await market.frames(s, TF_ORDER), s)
                     sig = r["signal"]
-                    thr = DEFAULT_CFG["threshold_synth"] if is_synthetic(s) else DEFAULT_CFG["threshold_forex"]
+                    thr = entry_threshold(s, DEFAULT_CFG)
                     key = (uid, s, sig and sig["direction"])
                     if sig and sig["score"] >= thr and time.time() - last_signal.get(key, 0) > 4 * 3600:
                         last_signal[key] = time.time()
@@ -101,7 +101,7 @@ async def analyze(symbol: str, tf: str = "M15", auto: bool = False):
     df = await market.candles(symbol, GRAN[tf], 300)
     out = {"symbol": symbol, "tf": tf, "candles": df.to_dict("records"), "overlay": overlay(df, tf)}
     if auto:
-        out["analysis"] = analyze_full(await market.frames(symbol, TF_ORDER))
+        out["analysis"] = analyze_full(await market.frames(symbol, TF_ORDER), symbol)
     return out
 
 

@@ -31,7 +31,7 @@ public class BotService {
         RANGES.put("loss_streak_cooldown", new double[]{1, 10});
         RANGES.put("cooldown_minutes", new double[]{5, 1440});
         RANGES.put("threshold_forex", new double[]{60, 95});
-        RANGES.put("threshold_synth", new double[]{70, 98});
+        RANGES.put("threshold_synth", new double[]{60, 95});
         RANGES.put("scan_interval", new double[]{20, 600});
         RANGES.put("news_blackout_before", new double[]{5, 120});
         RANGES.put("news_blackout_after", new double[]{0, 60});

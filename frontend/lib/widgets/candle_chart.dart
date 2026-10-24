@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import '../core/theme.dart';
 import 'common.dart';
 
@@ -274,15 +274,16 @@ class ChartPainter extends CustomPainter {
   }
 
   void _text(Canvas canvas, String s, Offset o, double size, Color col, {bool bold = false}) {
-    final tp = TextPainter(text: TextSpan(text: s, style: TextStyle(color: col, fontSize: size, fontWeight: bold ? FontWeight.w700 : FontWeight.w400)), textDirection: ui_td)..layout();
+    final tp = TextPainter(
+      text: TextSpan(text: s, style: TextStyle(color: col, fontSize: size, fontWeight: bold ? FontWeight.w700 : FontWeight.w400)),
+      textDirection: TextDirection.ltr,
+    )..layout();
     tp.paint(canvas, o);
   }
 
   @override
   bool shouldRepaint(covariant ChartPainter o) => true;
 }
-
-const ui_td = TextDirection.ltr;
 
 /// TradingView-style chart: drag to pan, pinch / mouse-wheel to zoom, tap with a drawing tool to draw.
 class CandleChart extends StatefulWidget {

@@ -154,14 +154,14 @@ And temporarily set `ENGINE_URL=http://localhost:8000` in `.env` (put it back to
 
 ## How the bot decides (and what it cannot promise)
 
-* Scan: every ~45 s ranks all open forex/gold/synthetic symbols on H1, then runs the full D1 → H4 → H1 → M15 → M5 analysis on the best 6.
-* Entry needs ALL of: D1/H4 not against the trade, price at an H1 zone (order block / support-resistance / Fibonacci 50-78.6), an M5 trigger candle, a stop that makes sense and at least 1.5R to the next structure. Extra points for RSI, MACD, Bollinger and trendline confirmation. Score threshold: 72 forex/gold, 82 synthetics (adjustable). Most scans correctly find nothing.
+* Scan: every ~45 s ranks open forex/gold on H1 and, separately, synthetic indices. Volatility 75 (`R_75`, `1HZ75V`), Boom and Crash are fully checked on every scan so forex pairs cannot crowd them out. The best 4 forex names are checked as well.
+* Forex/gold entry needs: D1/H4 not against the trade, price at an H1 zone, an M5 trigger, a sensible stop and at least 1.5R. Boom, Crash and Volatility use their own rule: a pullback (or H1 zone) plus an M5 trigger. Boom prefers buys, Crash prefers sells. Score threshold: 72 for every market (adjustable). Most scans correctly find nothing.
 * Bulk trades = several identical contracts, sized by `risk.plan_basket`: total basket stake <= `risk_pct` of balance (default 5 %), total open stake <= 15 %, one contract <= 10 %. A $10 account gets 1 contract of about $0.50; $1000 gets up to 10.
 * Exit: the whole basket closes at +25 % of its stake or -50 % (basket stop), before high-impact news, on the daily loss limit (10 %), or on the drawdown kill switch (25 % from peak). 3 losing baskets in a row pause trading for 60 min.
 * Gold NFP trader: 15 min before the release it analyses gold, then enters only if gold moves >= 1x M1 ATR after the release (1.6x if against the H4 bias), with a smaller basket.
 * Daily email report, signal emails, basket-closed and halt alerts.
 
-**No strategy can guarantee profit or an account that never loses.** On Deriv options the worst case per contract is the stake, so the limits above cap the loss per basket, per day and overall, but losing streaks will happen. Synthetic indices are random by design: technical analysis has no proven edge there. Run on demo for weeks and read the Performance page before risking real money.
+**No strategy can guarantee profit or an account that never loses.** On Deriv options the worst case per contract is the stake, so the limits above cap the loss per basket, per day and overall, but losing streaks will happen. Boom drifts up and Crash drifts down, with sharp spikes the other way; Volatility 75 does not trend like forex. Run on demo for weeks and read the Performance page before risking real money.
 
 ---
 

@@ -10,11 +10,11 @@ from collections import deque
 from datetime import datetime, timezone
 import httpx
 from . import news, risk
-from .analysis import analyze_full, quick_rank, TF_ORDER
+from .analysis import analyze_full, entry_threshold, quick_rank, TF_ORDER
 from .config import DEFAULT_CFG, BACKEND_URL, INTERNAL_KEY, GRAN, GOLD, DERIV_SYMBOL_KEY
 from .deriv import account_ws, DerivError
 from .indicators import atr
-from .market import is_synthetic
+from .market import PRIORITY_SYNTH, is_synthetic
 
 
 async def emit(user_id, typ, data):
@@ -171,29 +171,42 @@ class BotSession:
             return
         self.phase = "scanning market"
         syms = await self.market.tradable(self.cfg["include_synthetics"])
+        forex = [s for s in syms if not is_synthetic(s)]
+        synth = [s for s in syms if is_synthetic(s)]
 
         async def q(s):
             try:
                 df = await self.market.candles(s, GRAN["H1"], 250)
-                return quick_rank(df)[0], s
+                return quick_rank(df, synthetic=is_synthetic(s))[0], s
             except Exception:
                 return 0.0, s
-        ranked = sorted(await asyncio.gather(*[q(s) for s in syms]), reverse=True)
-        cands = [s for sc, s in ranked if sc >= 1][:6]
+        ranked_fx = sorted(await asyncio.gather(*[q(s) for s in forex]), reverse=True)
+        ranked_sy = sorted(await asyncio.gather(*[q(s) for s in synth]), reverse=True)
+        # Forex used to fill every deep-scan slot. Keep a forex shortlist, and always
+        # fully check Volatility 75, Boom and Crash plus the next-best synthetics.
+        fx_cands = [s for sc, s in ranked_fx if sc >= 1][:4]
+        sy_cands = [s for s in PRIORITY_SYNTH if s in synth]
+        for sc, s in ranked_sy:
+            if s not in sy_cands and sc >= 0.4:
+                sy_cands.append(s)
+            if len(sy_cands) >= len(PRIORITY_SYNTH) + 4:
+                break
+        cands = fx_cands + sy_cands
         best, summaries = None, []
         for s in cands:
             try:
-                r = analyze_full(await self.market.frames(s, TF_ORDER))
+                r = analyze_full(await self.market.frames(s, TF_ORDER), s)
             except Exception:
                 continue
-            thr = self.cfg["threshold_synth"] if is_synthetic(s) else self.cfg["threshold_forex"]
+            thr = entry_threshold(s, self.cfg)
             summaries.append({"symbol": s, "score": r["best_score"], "threshold": thr, "note": r["note"], "bias": r["bias"]})
             sig = r["signal"]
             if sig and sig["score"] >= thr and (best is None or sig["score"] > best[1]["score"]):
                 best = (s, sig)
         self.top, self.last_scan = summaries, now_iso()
         self.phase = "watching - no clean entry" if not best else "entry found"
-        self.log(f"scan of {len(syms)} symbols: {len(cands)} candidates, " +
+        shown = ", ".join(sy_cands[:6]) or "none"
+        self.log(f"scan: {len(forex)} forex, {len(synth)} synthetics; checked {len(fx_cands)} forex + {len(sy_cands)} synthetics ({shown}). " +
                  (f"best {best[0]} score {best[1]['score']}" if best else "nothing meets the entry threshold"))
         if best:
             s, sig = best
