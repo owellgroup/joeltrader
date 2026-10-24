@@ -181,16 +181,14 @@ class BotSession:
             except Exception:
                 return 0.0, s
         ranked_fx = sorted(await asyncio.gather(*[q(s) for s in forex]), reverse=True)
-        ranked_sy = sorted(await asyncio.gather(*[q(s) for s in synth]), reverse=True)
-        # Forex used to fill every deep-scan slot. Keep a forex shortlist, and always
-        # fully check Volatility 75, Boom and Crash plus the next-best synthetics.
         fx_cands = [s for sc, s in ranked_fx if sc >= 1][:4]
-        sy_cands = [s for s in PRIORITY_SYNTH if s in synth]
-        for sc, s in ranked_sy:
-            if s not in sy_cands and sc >= 0.4:
+        # Every open synthetic is fully checked. Priority names (VIX 75, Boom, Crash) go first.
+        seen = set()
+        sy_cands = []
+        for s in list(PRIORITY_SYNTH) + synth:
+            if s in synth and s not in seen:
                 sy_cands.append(s)
-            if len(sy_cands) >= len(PRIORITY_SYNTH) + 4:
-                break
+                seen.add(s)
         cands = fx_cands + sy_cands
         best, summaries = None, []
         for s in cands:
@@ -205,8 +203,7 @@ class BotSession:
                 best = (s, sig)
         self.top, self.last_scan = summaries, now_iso()
         self.phase = "watching - no clean entry" if not best else "entry found"
-        shown = ", ".join(sy_cands[:6]) or "none"
-        self.log(f"scan: {len(forex)} forex, {len(synth)} synthetics; checked {len(fx_cands)} forex + {len(sy_cands)} synthetics ({shown}). " +
+        self.log(f"scan: {len(forex)} forex, {len(synth)} synthetics; full check {len(fx_cands)} forex + all {len(sy_cands)} synthetics. " +
                  (f"best {best[0]} score {best[1]['score']}" if best else "nothing meets the entry threshold"))
         if best:
             s, sig = best
@@ -217,11 +214,28 @@ class BotSession:
             await self.open_basket(s, sig, "AUTO")
 
     # ---------- trading ----------
+    def _proposal_keys(self):
+        """New API requires underlying_symbol. Retry symbol only if that key is rejected."""
+        keys = []
+        for k in ("underlying_symbol", DERIV_SYMBOL_KEY, "symbol"):
+            if k and k not in keys:
+                keys.append(k)
+        return keys
+
     async def _proposal(self, symbol, ctype, stake, dur):
-        m = await self.ws.request({"proposal": 1, "amount": stake, "basis": "stake", "contract_type": ctype,
-                                   "currency": self.currency, "duration": dur, "duration_unit": "m",
-                                   DERIV_SYMBOL_KEY: symbol})
-        return m["proposal"]
+        last = None
+        for i, key in enumerate(self._proposal_keys()):
+            req = {"proposal": 1, "amount": stake, "basis": "stake", "contract_type": ctype,
+                   "currency": self.currency, "duration": dur, "duration_unit": "m", key: symbol}
+            try:
+                return (await self.ws.request(req))["proposal"]
+            except DerivError as e:
+                last = e
+                msg = f"{e.code} {e.message}".lower()
+                retry = i == 0 and ("inputvalidation" in msg or "underlying_symbol" in msg or "symbol" in msg)
+                if not retry:
+                    raise
+        raise last or DerivError("InputValidationFailed", "proposal rejected")
 
     async def _proposal_find(self, symbol, ctype, stake, durs):
         last = None
@@ -245,12 +259,16 @@ class BotSession:
             try:
                 if dur is None:
                     prop, dur = await self._proposal_find(symbol, ctype, plan["stake"], sig.get("durations") or [15, 30, 60, 120])
-                    if float(prop["payout"]) / float(prop["ask_price"]) < 1.6:
-                        self.log(f"skip {symbol}: payout too low ({prop['payout']}/{prop['ask_price']})")
+                    ask = prop.get("ask_price")
+                    pay = prop.get("payout")
+                    if ask not in (None, "") and pay not in (None, "") and float(ask) > 0 and float(pay) / float(ask) < 1.6:
+                        self.log(f"skip {symbol}: payout too low ({pay}/{ask})")
                         break
                 else:
                     prop = await self._proposal(symbol, ctype, plan["stake"], dur)
-                buy = (await self.ws.request({"buy": prop["id"], "price": float(prop["ask_price"])}))["buy"]
+                ask = prop.get("ask_price")
+                price_cap = float(ask) if ask not in (None, "") else plan["stake"]
+                buy = (await self.ws.request({"buy": prop["id"], "price": price_cap}))["buy"]
                 cid, price = buy["contract_id"], float(buy["buy_price"])
                 b.stake += price
                 b.open.add(cid)

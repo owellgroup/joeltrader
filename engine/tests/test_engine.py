@@ -42,7 +42,11 @@ def test_analyze_never_crashes_and_signals_are_consistent():
     print("valid signals in 60 random markets:", valid)
 
 
-def test_synthetic_symbols_are_recognized():
+def test_proposal_uses_underlying_symbol_first():
+    from app.bot import BotSession
+    from app.market import Market
+    b = BotSession(1, "DOT1", "DEMO", "tok", "app", {}, Market())
+    assert b._proposal_keys()[0] == "underlying_symbol"
     for s in ("R_75", "1HZ75V", "BOOM1000", "BOOM500", "CRASH1000", "CRASH300N"):
         assert is_synthetic(s)
         assert synth_kind(s) in ("vol", "boom", "crash")

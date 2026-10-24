@@ -4,9 +4,9 @@ INTERNAL_KEY = os.getenv("INTERNAL_KEY", "change-me")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8181")
 DERIV_REST = os.getenv("DERIV_REST", "https://api.derivws.com")
 DERIV_WS_PUBLIC = os.getenv("DERIV_WS_PUBLIC", "wss://api.derivws.com/trading/v1/options/ws/public")
-# Name of the symbol field inside proposal requests. Classic API: "symbol".
-# If Deriv's new API expects "underlying_symbol", set DERIV_SYMBOL_KEY=underlying_symbol.
-DERIV_SYMBOL_KEY = os.getenv("DERIV_SYMBOL_KEY", "symbol")
+# New Deriv options API names this field underlying_symbol. "symbol" is rejected
+# with InputValidationFailed: symbol,underlying_symbol.
+DERIV_SYMBOL_KEY = os.getenv("DERIV_SYMBOL_KEY", "underlying_symbol")
 CALENDAR_URL = os.getenv("CALENDAR_URL", "https://nfs.faireconomy.media/ff_calendar_thisweek.json")
 
 GRAN = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}

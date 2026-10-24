@@ -11,7 +11,7 @@ services:
     environment:
       INTERNAL_KEY: ${INTERNAL_KEY:?set INTERNAL_KEY in .env / Dokploy}
       BACKEND_URL: ${BACKEND_URL:-http://backend:8181}
-      DERIV_SYMBOL_KEY: ${DERIV_SYMBOL_KEY:-symbol}
+      DERIV_SYMBOL_KEY: ${DERIV_SYMBOL_KEY:-underlying_symbol}
     # Private only — not published on the host. Backend reaches it as http://engine:8000
     expose:
       - "8000"
