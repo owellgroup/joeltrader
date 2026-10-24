@@ -1,0 +1,6 @@
+.env
+target/
+__pycache__/
+.pytest_cache/
+frontend/build/
+frontend/.dart_tool/

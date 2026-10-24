@@ -1,0 +1,59 @@
+# joelTrader: Spring Boot API + Python engine on Dokploy.
+# Only host port 8181 is published so other Dokploy containers keep their ports.
+# Flutter runs locally and talks to http://145.241.187.174:8181
+# Postgres is the hosted DB in DB_URL — no local database container.
+name: joeltrader
+
+services:
+  engine:
+    build: ./engine
+    restart: unless-stopped
+    environment:
+      INTERNAL_KEY: ${INTERNAL_KEY:?set INTERNAL_KEY in .env / Dokploy}
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8181}
+      DERIV_SYMBOL_KEY: ${DERIV_SYMBOL_KEY:-symbol}
+    # Private only — not published on the host. Backend reaches it as http://engine:8000
+    expose:
+      - "8000"
+    networks:
+      - joeltrader
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      - engine
+    environment:
+      SERVER_PORT: ${SERVER_PORT:-8181}
+      SERVER_ADDRESS: ${SERVER_ADDRESS:-0.0.0.0}
+      DB_URL: ${DB_URL:?set DB_URL in .env / Dokploy}
+      DB_USER: ${DB_USER:?set DB_USER in .env / Dokploy}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env / Dokploy}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env / Dokploy}
+      APP_ENC_KEY: ${APP_ENC_KEY:?set APP_ENC_KEY in .env / Dokploy}
+      INTERNAL_KEY: ${INTERNAL_KEY:?set INTERNAL_KEY in .env / Dokploy}
+      ENGINE_URL: ${ENGINE_URL:-http://engine:8000}
+      APP_CORS: ${APP_CORS:-*}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-joel@wayaspot.com}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-Admin@123}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-hello@notifications.wayaspot.com}
+      REPORT_CRON: ${REPORT_CRON:-0 55 23 * * *}
+      TZ: ${TZ:-Africa/Windhoek}
+    ports:
+      - "8181:8181"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8181/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    networks:
+      - joeltrader
+
+networks:
+  joeltrader:
+    driver: bridge
